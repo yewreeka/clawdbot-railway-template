@@ -55,7 +55,7 @@ WORKDIR /app
 # Wrapper deps
 COPY package.json ./
 RUN npm install \
-  && cd node_modules/convos-node-sdk && npm install && npm run build && cd ../.. \
+  && cd node_modules/convos-node-sdk && npm install --include=dev && npm run build && cd ../.. \
   && npm prune --omit=dev \
   && npm cache clean --force
 
