@@ -20,9 +20,10 @@ RUN corepack enable
 
 WORKDIR /openclaw
 
-# Pin to a known ref (tag/branch). If it doesn't exist, fall back to main.
-ARG OPENCLAW_GIT_REF=main
-RUN git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" https://github.com/openclaw/openclaw.git .
+# Configurable OpenClaw source - using xmtplabs fork with Convos channel
+ARG OPENCLAW_GIT_REPO=https://github.com/xmtplabs/openclaw.git
+ARG OPENCLAW_GIT_REF=yewreeka/convos-channel
+RUN git clone --depth 1 --branch "${OPENCLAW_GIT_REF}" "${OPENCLAW_GIT_REPO}" .
 
 # Patch: relax version requirements for packages that may reference unpublished versions.
 # Apply to all extension package.json files to handle workspace protocol (workspace:*).
