@@ -54,7 +54,10 @@ WORKDIR /app
 
 # Wrapper deps
 COPY package.json ./
-RUN npm install --omit=dev && npm cache clean --force
+RUN npm install \
+  && cd node_modules/convos-node-sdk && npm install && npm run build && cd ../.. \
+  && npm prune --omit=dev \
+  && npm cache clean --force
 
 # Copy built openclaw
 COPY --from=openclaw-build /openclaw /openclaw
