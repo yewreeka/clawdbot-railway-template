@@ -119,6 +119,12 @@ export async function setupConvos(options = {}) {
     });
     console.log("[convos-setup] Config saved successfully");
 
+    // Ensure gateway.mode is set so gateway can start
+    execSync(`openclaw config set gateway.mode local`, {
+      stdio: "inherit",
+    });
+    console.log("[convos-setup] Gateway mode set to local");
+
     // Run doctor --fix to fully enable the channel
     execSync(`openclaw doctor --fix`, {
       stdio: "inherit",
