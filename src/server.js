@@ -993,9 +993,9 @@ app.post("/setup/api/convos/complete-setup", requireSetupAuth, async (req, res) 
     await restartGateway();
 
     // Generate pairing code for convos channel
-    console.log("[complete-setup] Running gateway pair --channel convos...");
+    console.log("[complete-setup] Running gateway pair convos...");
     const pairResult = await runCmd(OPENCLAW_NODE,
-      clawArgs(["gateway", "pair", "--channel", "convos"]));
+      clawArgs(["gateway", "pair", "convos"]));
     console.log("[complete-setup] gateway pair result:", {
       code: pairResult.code,
       output: pairResult.output
