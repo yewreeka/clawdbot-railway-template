@@ -921,7 +921,24 @@ app.get("/setup/api/status", requireSetupAuth, async (_req, res) => {
   });
 });
 
-// Convos setup endpoint - runs onboarding, starts gateway, then calls POST /convos/setup
+// Map auth choice values to environment variable names.
+// The gateway reads provider API keys from env vars at startup.
+const AUTH_ENV_MAP = {
+  "apiKey": "ANTHROPIC_API_KEY",
+  "openai-api-key": "OPENAI_API_KEY",
+  "openrouter-api-key": "OPENROUTER_API_KEY",
+  "gemini-api-key": "GOOGLE_API_KEY",
+  "ai-gateway-api-key": "AI_GATEWAY_API_KEY",
+  "moonshot-api-key": "MOONSHOT_API_KEY",
+  "kimi-code-api-key": "KIMI_CODE_API_KEY",
+  "zai-api-key": "ZAI_API_KEY",
+  "minimax-api": "MINIMAX_API_KEY",
+  "minimax-api-lightning": "MINIMAX_API_KEY",
+  "synthetic-api-key": "SYNTHETIC_API_KEY",
+  "opencode-zen": "OPENCODE_ZEN_API_KEY",
+};
+
+// Convos setup endpoint — writes config directly, starts gateway, calls POST /convos/setup
 app.post("/setup/api/convos/setup", requireSetupAuth, async (req, res) => {
   try {
     const payload = req.body || {};
@@ -929,43 +946,39 @@ app.post("/setup/api/convos/setup", requireSetupAuth, async (req, res) => {
     fs.mkdirSync(STATE_DIR, { recursive: true });
     fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 
-    // Stop any gateway we manage before config writes to avoid cascading SIGUSR1 restarts.
+    // Stop any running gateway before rewriting config.
     if (gatewayProc) {
-      console.log("[convos] Stopping existing gateway before setup...");
+      console.log("[convos] Stopping existing gateway...");
       try { gatewayProc.kill("SIGTERM"); } catch {}
       await sleep(750);
       gatewayProc = null;
     }
 
-    // Run onboarding first (creates config file with model/auth settings)
-    console.log("[convos] Running onboarding...");
-    const onboardArgs = buildOnboardArgs(payload);
-    const onboard = await runCmd(OPENCLAW_NODE, clawArgs(onboardArgs));
+    // Write config JSON directly — no onboarding, no config set calls, no restart cascade.
+    console.log("[convos] Writing gateway config...");
+    const config = {
+      gateway: {
+        mode: "local",
+        port: INTERNAL_GATEWAY_PORT,
+        bind: "loopback",
+        auth: { mode: "token", token: OPENCLAW_GATEWAY_TOKEN },
+        controlUi: { allowInsecureAuth: true },
+      },
+    };
+    fs.writeFileSync(configPath(), JSON.stringify(config, null, 2));
 
-    if (onboard.code !== 0 || !isConfigured()) {
-      return res.status(500).json({
-        success: false,
-        error: "Onboarding failed",
-        output: onboard.output,
-      });
+    // Set the AI provider API key as an env var — the gateway reads it at startup.
+    // If the key is already set via Railway env var, this is a no-op.
+    const secret = (payload.authSecret || "").trim();
+    if (secret && payload.authChoice) {
+      const envVar = AUTH_ENV_MAP[payload.authChoice];
+      if (envVar) {
+        process.env[envVar] = secret;
+        console.log(`[convos] Set ${envVar} from setup form`);
+      }
     }
 
-    // Onboarding may start a gateway as a side-effect. Kill any process on the
-    // gateway port so our config sets don't trigger cascading SIGUSR1 restarts
-    // and so we can start a clean gateway afterwards.
-    await runCmd("sh", ["-c", `fuser -k ${INTERNAL_GATEWAY_PORT}/tcp 2>/dev/null || true`]);
-    await sleep(500);
-
-    // Batch all gateway config before starting the gateway (avoids restart cascade).
-    await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.mode", "local"]));
-    await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.auth.mode", "token"]));
-    await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.auth.token", OPENCLAW_GATEWAY_TOKEN]));
-    await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.bind", "loopback"]));
-    await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.port", String(INTERNAL_GATEWAY_PORT)]));
-    // Disable device pairing for Control UI - Railway proxy makes all connections appear non-local
-    await runCmd(OPENCLAW_NODE, clawArgs(["config", "set", "gateway.controlUi.allowInsecureAuth", "true"]));
-
-    // Start gateway (all config is written, so only one start — no cascading restarts)
+    // Start gateway (config is already written — single clean start)
     console.log("[convos] Starting gateway...");
     await ensureGatewayRunning();
 
