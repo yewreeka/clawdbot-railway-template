@@ -62,6 +62,36 @@ process.env.OPENCLAW_GATEWAY_TOKEN = OPENCLAW_GATEWAY_TOKEN;
 // Backward-compat: some older flows expect CLAWDBOT_GATEWAY_TOKEN.
 process.env.CLAWDBOT_GATEWAY_TOKEN = process.env.CLAWDBOT_GATEWAY_TOKEN || OPENCLAW_GATEWAY_TOKEN;
 
+// Persist auth credentials across container restarts.
+// Saved to STATE_DIR/auth.json with restricted permissions.
+function saveAuthCredentials(authChoice, envVar, secret) {
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(
+      path.join(STATE_DIR, "auth.json"),
+      JSON.stringify({ authChoice, envVar, secret }),
+      { encoding: "utf8", mode: 0o600 }
+    );
+    console.log(`[convos] Persisted auth credentials to ${STATE_DIR}/auth.json`);
+  } catch (err) {
+    console.warn("[convos] Failed to persist auth credentials:", err.message);
+  }
+}
+
+function restoreAuthCredentials() {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(STATE_DIR, "auth.json"), "utf8"));
+    if (data.envVar && data.secret && !process.env[data.envVar]) {
+      process.env[data.envVar] = data.secret;
+      console.log(`[convos] Restored ${data.envVar} from saved auth credentials`);
+    }
+  } catch {
+    // No saved credentials — nothing to restore.
+  }
+}
+
+restoreAuthCredentials();
+
 // Where the gateway will listen internally (we proxy to it).
 const INTERNAL_GATEWAY_PORT = Number.parseInt(process.env.INTERNAL_GATEWAY_PORT ?? "18789", 10);
 const INTERNAL_GATEWAY_HOST = process.env.INTERNAL_GATEWAY_HOST ?? "127.0.0.1";
@@ -1039,6 +1069,7 @@ app.post("/setup/api/convos/setup", requireSetupAuth, async (req, res) => {
     if (secret && providerCfg?.envVar) {
       process.env[providerCfg.envVar] = secret;
       console.log(`[convos] Set ${providerCfg.envVar} from setup form`);
+      saveAuthCredentials(authChoice, providerCfg.envVar, secret);
     }
 
     // Some providers need custom models.providers config (e.g., Moonshot, Synthetic).
