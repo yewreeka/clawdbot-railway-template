@@ -65,6 +65,9 @@ RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"'
 
 COPY src ./src
 
+# Tell the gateway where to find bundled extensions (e.g. Convos channel).
+ENV OPENCLAW_BUNDLED_PLUGINS_DIR=/openclaw/extensions
+
 # The wrapper listens on this port.
 ENV OPENCLAW_PUBLIC_PORT=8080
 ENV PORT=8080
